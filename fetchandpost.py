@@ -1,6 +1,6 @@
 # deploy this script on a local machine on the same network as your printers
-# in our case, for instance the door lock Raspberry Pi
-# it will fetch the status of each printer and post it to a online endpoint
+# in our case, for instance the doorlocks Raspberry Pi
+# it will fetch the status of each printer and post it to an online endpoint
 
 #!/usr/bin/env python3
 import requests
@@ -12,7 +12,7 @@ from constants import printers  # import the printer definitions
 # (done in constants.py)
 
 # 2. Endpoint to receive status updates
-post_url = "http://rfid.bergenfellesverksted.no/post3dprinter_status.php"
+post_url = "https://yoururl.com/post3dprinter_status.php"
 
 # 3. Loop: fetch & forward
 for p in printers:

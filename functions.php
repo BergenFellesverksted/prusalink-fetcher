@@ -6,6 +6,22 @@
  * Outputs a responsive grid of “cards” showing each printer’s live status,
  * with stale cards (last update >10 min ago) rendered at 50% opacity.
  */
+// helper to turn seconds into “1h 2m 3s”
+function format_hms( $sec ) {
+    $h = intval( floor( $sec / 3600 ) );
+    $m = intval( floor( ( $sec % 3600 ) / 60 ) );
+    $s = intval( $sec % 60 );
+    $parts = [];
+    if ( $h > 0 ) {
+        $parts[] = $h . 'h';
+    }
+    if ( $m > 0 || $h > 0 ) {
+        $parts[] = $m . 'm';
+    }
+    $parts[] = $s . 's';
+    return implode( ' ', $parts );
+}
+
 function render_printer_cards() {
     global $wpdb;
 
@@ -100,11 +116,11 @@ function render_printer_cards() {
                . "</div>\n";
         $html .= '<div class="percent">Progress: ' . esc_html( $pct ) . "%</div>\n";
         $html .= '<div class="stat">Printing: ' 
-               . number_format_i18n( $printed / 60, 1 ) 
-               . ' min</div>';
+              . esc_html( format_hms( $printed ) ) 
+              . "</div>\n";
         $html .= '<div class="stat">Remaining: ' 
-               . number_format_i18n( $remaining / 60, 1 )
-               . ' min</div>';
+              . esc_html( format_hms( $remaining ) ) 
+              . "</div>\n";
         $html .= '<div class="stat">Bed: ' 
                . number_format_i18n( floatval($r['temp_bed']), 1 )
                . ' / ' 
