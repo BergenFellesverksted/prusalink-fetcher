@@ -12,7 +12,7 @@ from constants import printers  # import the printer definitions
 # (done in constants.py)
 
 # 2. Endpoint to receive status updates
-post_url = "https://yoururl.com/post3dprinter_status.php"
+post_url = "https://rfid.bergenfellesverksted.no/post3dprinter_status.php"
 
 # 3. Loop: fetch & forward
 for p in printers:

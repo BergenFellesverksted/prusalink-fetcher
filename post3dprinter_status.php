@@ -1,6 +1,14 @@
 <?php
 require 'constants.php';
 
+// Your API key; you should generate a unique one and store it securely.
+$api_key = '[your_api_key_here]';
+
+// Check if the API key matches
+if (!isset($_GET['key']) || $_GET['key'] !== $api_key) {
+    die('Unauthorized access!');
+}
+
 // connect
 $mysqli = new mysqli(DB_SERVER, DB_USER, DB_PASSWORD, DB_NAME);
 if ($mysqli->connect_errno) {
