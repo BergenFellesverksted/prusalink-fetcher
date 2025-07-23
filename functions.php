@@ -4,9 +4,13 @@
  * Shortcode: [printer_cards]
  *
  * Outputs a responsive grid of “cards” showing each printer’s live status,
- * with stale cards (last update >10 min ago) rendered at 50% opacity.
+ * with stale cards (last update >10 min ago) rendered at 50% opacity,
+ * and auto-refreshing every minute via AJAX.
  */
-// helper to turn seconds into “1h 2m 3s”
+
+/**
+ * Helper: turn seconds into “1h 2m 3s” (no leading zeros).
+ */
 function format_hms( $sec ) {
     $h = intval( floor( $sec / 3600 ) );
     $m = intval( floor( ( $sec % 3600 ) / 60 ) );
@@ -22,6 +26,19 @@ function format_hms( $sec ) {
     return implode( ' ', $parts );
 }
 
+/**
+ * AJAX handler (public & private) to return the cards HTML.
+ */
+add_action( 'wp_ajax_nopriv_get_printer_cards', 'ajax_printer_cards' );
+add_action( 'wp_ajax_get_printer_cards',        'ajax_printer_cards' );
+function ajax_printer_cards() {
+    echo render_printer_cards();
+    wp_die();
+}
+
+/**
+ * Main shortcode callback.
+ */
 function render_printer_cards() {
     global $wpdb;
 
@@ -44,8 +61,16 @@ function render_printer_cards() {
         return '<p>No printer status data found.</p>';
     }
 
-    // 3) build CSS + container
-    $html = '
+    // Prepare for time calculations
+    $date_fmt = get_option('date_format');
+    $time_fmt = get_option('time_format');
+    $now_utc  = new DateTime('now', new DateTimeZone('UTC'));
+
+    // Capture all output
+    ob_start();
+
+    // Only include CSS on initial page load
+    if ( ! defined( 'DOING_AJAX' ) ) : ?>
     <style>
       .printer-grid {
         display: grid;
@@ -71,79 +96,82 @@ function render_printer_cards() {
         color: gray;
       }
     </style>
+    <?php endif; ?>
 
-    <div class="printer-grid">';
+    <div id="printer-cards-container" class="printer-grid">
+    <?php foreach ( $rows as $r ) :
 
-    // WP date/time formats
-    $date_fmt = get_option('date_format');
-    $time_fmt = get_option('time_format');
-    $now_utc = new DateTime('now', new DateTimeZone('UTC'));
-
-    foreach ( $rows as $r ) {
-        // calculate percentage
+        // Calculate percent complete
         $printed   = floatval( $r['time_printing'] );
         $remaining = floatval( $r['time_remaining'] );
         $pct = ($printed + $remaining) > 0
              ? round( $printed / ($printed + $remaining) * 100, 1 )
              : 0;
 
-        // parse last_updatedUTC, compute age
+        // Compute age for opacity check
         try {
-            $dt_utc = new DateTime( $r['last_updatedUTC'], new DateTimeZone('UTC') );
+            $dt_utc      = new DateTime( $r['last_updatedUTC'], new DateTimeZone('UTC') );
             $age_seconds = $now_utc->getTimestamp() - $dt_utc->getTimestamp();
         } catch ( Exception $e ) {
             $age_seconds = 0;
         }
+        $opacity_attr = $age_seconds > 600
+                      ? 'style="opacity:0.5;"'
+                      : '';
 
-        // determine opacity style if stale
-        $opacity_style = $age_seconds > 600
-                       ? 'style="opacity:0.5;"'
-                       : '';
-
-        // convert UTC → Europe/Oslo for display
+        // Convert UTC to Europe/Oslo
         try {
             $dt_utc->setTimezone( new DateTimeZone('Europe/Oslo') );
             $last = $dt_utc->format( $date_fmt . ' ' . $time_fmt );
         } catch ( Exception $e ) {
             $last = esc_html( $r['last_updatedUTC'] );
         }
+    ?>
+      <div class="printer-card"<?php echo $opacity_attr; ?>>
+        <h3><?php echo esc_html( $r['printer_name'] ); ?></h3>
+        <div class="stat state">State: <?php echo esc_html( strtoupper( $r['state'] ) ); ?></div>
+        <div class="stat percent">Progress: <?php echo esc_html( $pct ); ?>%</div>
+        <div class="stat">Printing: <?php echo esc_html( format_hms( $printed ) ); ?></div>
+        <div class="stat">Remaining: <?php echo esc_html( format_hms( $remaining ) ); ?></div>
+        <div class="stat">Bed: 
+          <?php echo esc_html( number_format_i18n( floatval($r['temp_bed']), 1 ) ); ?> /
+          <?php echo esc_html( number_format_i18n( floatval($r['target_bed']), 1 ) ); ?>°C
+        </div>
+        <div class="stat">Nozzle: 
+          <?php echo esc_html( number_format_i18n( floatval($r['temp_nozzle']), 1 ) ); ?> /
+          <?php echo esc_html( number_format_i18n( floatval($r['target_nozzle']), 1 ) ); ?>°C
+        </div>
+        <div class="stat">Z: <?php echo esc_html( number_format_i18n( floatval($r['axis_z']), 2 ) ); ?> mm</div>
+        <div class="stat">Last updated: <?php echo esc_html( $last ); ?></div>
+      </div>
+    <?php endforeach; ?>
+    </div>
 
-        // render card with conditional opacity
-        $html .= "<div class=\"printer-card\" {$opacity_style}>";
-        $html .= '<h3>' . esc_html( $r['printer_name'] ) . '</h3>';
-        $html .= '<div class="state">State: ' 
-               . esc_html( strtoupper( $r['state'] ) ) 
-               . "</div>\n";
-        $html .= '<div class="percent">Progress: ' . esc_html( $pct ) . "%</div>\n";
-        $html .= '<div class="stat">Printing: ' 
-              . esc_html( format_hms( $printed ) ) 
-              . "</div>\n";
-        $html .= '<div class="stat">Remaining: ' 
-              . esc_html( format_hms( $remaining ) ) 
-              . "</div>\n";
-        $html .= '<div class="stat">Bed: ' 
-               . number_format_i18n( floatval($r['temp_bed']), 1 )
-               . ' / ' 
-               . number_format_i18n( floatval($r['target_bed']), 1 )
-               . "°C</div>\n";
-        $html .= '<div class="stat">Nozzle: ' 
-               . number_format_i18n( floatval($r['temp_nozzle']), 1 )
-               . ' / ' 
-               . number_format_i18n( floatval($r['target_nozzle']), 1 )
-               . "°C</div>\n";
-        $html .= '<div class="stat">Z: ' 
-               . number_format_i18n( floatval($r['axis_z']), 2 )
-               . " mm</div>\n";
-        $html .= '<div class="stat">Last updated: ' 
-               . esc_html( $last ) 
-               . "</div>\n";
-        $html .= "</div>\n";
-    }
+    <?php if ( ! defined( 'DOING_AJAX' ) ) : ?>
+    <script>
+    (function(){
+      var containerID = 'printer-cards-container';
+      var ajaxURL     = '<?php echo esc_js( admin_url('admin-ajax.php') . '?action=get_printer_cards' ); ?>';
+      function refresh() {
+        fetch(ajaxURL)
+          .then(function(res){ return res.text(); })
+          .then(function(html){
+            var old = document.getElementById(containerID);
+            if (old && html) {
+              var temp = document.createElement('div');
+              temp.innerHTML = html;
+              var replacement = temp.firstElementChild;
+              old.parentNode.replaceChild(replacement, old);
+            }
+          });
+      }
+      setInterval(refresh, 60000);
+    })();
+    </script>
+    <?php endif;
 
-    $html .= "</div>\n";
-    return $html;
+    return ob_get_clean();
 }
 add_shortcode( 'printer_cards', 'render_printer_cards' );
-
 
 ?>
