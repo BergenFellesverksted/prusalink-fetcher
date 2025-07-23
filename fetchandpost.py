@@ -22,7 +22,7 @@ for p in printers:
 
     try:
         # fetch from printer
-        r = requests.get(status_url, auth=auth, timeout=10)
+        r = requests.get(status_url, auth=auth, timeout=5)
         r.raise_for_status()
         data = r.json()
 
