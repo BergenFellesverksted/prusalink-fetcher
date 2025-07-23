@@ -7,12 +7,13 @@ import requests
 from requests.auth import HTTPDigestAuth
 import sys
 from constants import printers  # import the printer definitions
+from constants import api_key  # import the API key
 
 # 1. Define your printers
 # (done in constants.py)
 
 # 2. Endpoint to receive status updates
-post_url = "https://rfid.bergenfellesverksted.no/post3dprinter_status.php"
+post_url = f"https://rfid.bergenfellesverksted.no/post3dprinter_status.php?key={api_key}"
 
 # 3. Loop: fetch & forward
 for p in printers:

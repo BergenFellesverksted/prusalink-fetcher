@@ -6,3 +6,5 @@ printers = [
     {"name": "Prusa MK4S White",  "ip": "", "username": "maker", "password": ""},
     {"name": "Prusa MK4S Black",  "ip": "", "username": "maker", "password": ""},
 ]
+
+api_key = '<your_api_key_here>'
