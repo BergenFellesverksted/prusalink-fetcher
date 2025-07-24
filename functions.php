@@ -147,8 +147,8 @@ function render_printer_cards() {
     ?>
       <div class="printer-card"<?php echo $opacity_attr; ?>>
         <h3><?php echo esc_html( $r['printer_name'] ); ?></h3>
-        <div class="stat state">State: <?php echo esc_html( strtoupper( $r['state'] ) ); ?></div>
-        <div class="stat percent">Progress: <?php echo esc_html( $pct ); ?>%</div>
+        <div class="state">State: <?php echo esc_html( strtoupper( $r['state'] ) ); ?></div>
+        <div class="percent">Progress: <?php echo esc_html( $pct ); ?>%</div>
         <div class="stat">Printing: <?php echo esc_html( format_hms( $printed ) ); ?></div>
         <div class="stat">
           Remaining: <?php echo esc_html( format_hms( $remaining ) ); ?>
