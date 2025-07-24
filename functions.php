@@ -1,11 +1,10 @@
 <?php
-
 /**
  * Shortcode: [printer_cards]
  *
  * Outputs a responsive grid of “cards” showing each printer’s live status,
  * with stale cards (last update >10 min ago) rendered at 50% opacity,
- * and auto-refreshing every minute via AJAX.
+ * auto-refreshing every minute via AJAX, and showing an ETA (HH:MM Oslo time) after Remaining.
  */
 
 /**
@@ -19,10 +18,16 @@ function format_hms( $sec ) {
     if ( $h > 0 ) {
         $parts[] = $h . 'h';
     }
-    if ( $m > 0 || $h > 0 ) {
+    if ( $m > 0 ) {
         $parts[] = $m . 'm';
     }
-    $parts[] = $s . 's';
+    if ( $s > 0 ) {
+        $parts[] = $s . 's';
+    }
+    // if everything was zero, show "0s"
+    if ( empty( $parts ) ) {
+        return '0s';
+    }
     return implode( ' ', $parts );
 }
 
@@ -116,10 +121,23 @@ function render_printer_cards() {
             $age_seconds = 0;
         }
         $opacity_attr = $age_seconds > 600
-                      ? 'style="opacity:0.5;"'
+                      ? ' style="opacity:0.5;"'
                       : '';
 
-        // Convert UTC to Europe/Oslo
+        // Compute ETA
+        $eta_str = '';
+        try {
+            // clone now in UTC and add remaining seconds
+            $eta_utc = clone $now_utc;
+            $eta_utc->modify( '+' . intval($remaining) . ' seconds' );
+            // convert to Europe/Oslo
+            $eta_utc->setTimezone( new DateTimeZone('Europe/Oslo') );
+            $eta_str = $eta_utc->format('H:i');
+        } catch ( Exception $e ) {
+            $eta_str = '';
+        }
+
+        // Convert timestamp to Europe/Oslo for display
         try {
             $dt_utc->setTimezone( new DateTimeZone('Europe/Oslo') );
             $last = $dt_utc->format( $date_fmt . ' ' . $time_fmt );
@@ -132,12 +150,15 @@ function render_printer_cards() {
         <div class="stat state">State: <?php echo esc_html( strtoupper( $r['state'] ) ); ?></div>
         <div class="stat percent">Progress: <?php echo esc_html( $pct ); ?>%</div>
         <div class="stat">Printing: <?php echo esc_html( format_hms( $printed ) ); ?></div>
-        <div class="stat">Remaining: <?php echo esc_html( format_hms( $remaining ) ); ?></div>
-        <div class="stat">Bed: 
+        <div class="stat">
+          Remaining: <?php echo esc_html( format_hms( $remaining ) ); ?>
+          <?php if ( $eta_str ) : ?> / ETA: <?php echo esc_html( $eta_str ); ?><?php endif; ?>
+        </div>
+        <div class="stat">Bed:
           <?php echo esc_html( number_format_i18n( floatval($r['temp_bed']), 1 ) ); ?> /
           <?php echo esc_html( number_format_i18n( floatval($r['target_bed']), 1 ) ); ?>°C
         </div>
-        <div class="stat">Nozzle: 
+        <div class="stat">Nozzle:
           <?php echo esc_html( number_format_i18n( floatval($r['temp_nozzle']), 1 ) ); ?> /
           <?php echo esc_html( number_format_i18n( floatval($r['target_nozzle']), 1 ) ); ?>°C
         </div>
