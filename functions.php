@@ -152,7 +152,7 @@ function render_printer_cards() {
         <div class="stat">Printing: <?php echo esc_html( format_hms( $printed ) ); ?></div>
         <div class="stat">
           Remaining: <?php echo esc_html( format_hms( $remaining ) ); ?>
-          <?php if ( $eta_str ) : ?> / ETA: <?php echo esc_html( $eta_str ); ?><?php endif; ?>
+          <?php if ( $eta_str && $remaining != 0 ) : ?> / ETA: <?php echo esc_html( $eta_str ); ?><?php endif; ?>
         </div>
         <div class="stat">Bed:
           <?php echo esc_html( number_format_i18n( floatval($r['temp_bed']), 1 ) ); ?> /
