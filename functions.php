@@ -3,12 +3,13 @@
  * Shortcode: [printer_cards]
  *
  * Outputs a responsive grid of “cards” showing each printer’s live status,
- * with stale cards (last update >10 min ago) rendered at 50% opacity,
- * auto-refreshing every minute via AJAX, and showing an ETA (HH:MM Oslo time) after Remaining.
+ * with stale cards (last update >10 min ago) rendered at 50% opacity,
+ * auto-refreshing every minute via AJAX, and showing an ETA (HH:MM Oslo time)
+ * calculated from the last_updatedUTC timestamp.
  */
 
 /**
- * Helper: turn seconds into “1h 2m 3s” (no leading zeros).
+ * Helper: turn seconds into “1h 2m 3s” but only include non‑zero components.
  */
 function format_hms( $sec ) {
     $h = intval( floor( $sec / 3600 ) );
@@ -24,7 +25,6 @@ function format_hms( $sec ) {
     if ( $s > 0 ) {
         $parts[] = $s . 's';
     }
-    // if everything was zero, show "0s"
     if ( empty( $parts ) ) {
         return '0s';
     }
@@ -69,9 +69,7 @@ function render_printer_cards() {
     // Prepare for time calculations
     $date_fmt = get_option('date_format');
     $time_fmt = get_option('time_format');
-    $now_utc  = new DateTime('now', new DateTimeZone('UTC'));
 
-    // Capture all output
     ob_start();
 
     // Only include CSS on initial page load
@@ -106,44 +104,39 @@ function render_printer_cards() {
     <div id="printer-cards-container" class="printer-grid">
     <?php foreach ( $rows as $r ) :
 
+        // Raw timestamps
+        try {
+            $dt_last = new DateTime( $r['last_updatedUTC'], new DateTimeZone('UTC') );
+        } catch ( Exception $e ) {
+            continue;
+        }
+
         // Calculate percent complete
         $printed   = floatval( $r['time_printing'] );
         $remaining = floatval( $r['time_remaining'] );
-        $pct = ($printed + $remaining) > 0
-             ? round( $printed / ($printed + $remaining) * 100, 1 )
+        $pct = ( $printed + $remaining ) > 0
+             ? round( $printed / ( $printed + $remaining ) * 100, 1 )
              : 0;
 
         // Compute age for opacity check
-        try {
-            $dt_utc      = new DateTime( $r['last_updatedUTC'], new DateTimeZone('UTC') );
-            $age_seconds = $now_utc->getTimestamp() - $dt_utc->getTimestamp();
-        } catch ( Exception $e ) {
-            $age_seconds = 0;
-        }
+        $now_utc = new DateTime('now', new DateTimeZone('UTC'));
+        $age_seconds = $now_utc->getTimestamp() - $dt_last->getTimestamp();
         $opacity_attr = $age_seconds > 600
                       ? ' style="opacity:0.5;"'
                       : '';
 
-        // Compute ETA
+        // Compute ETA from last_updatedUTC
         $eta_str = '';
-        try {
-            // clone now in UTC and add remaining seconds
-            $eta_utc = clone $now_utc;
-            $eta_utc->modify( '+' . intval($remaining) . ' seconds' );
-            // convert to Europe/Oslo
-            $eta_utc->setTimezone( new DateTimeZone('Europe/Oslo') );
-            $eta_str = $eta_utc->format('H:i');
-        } catch ( Exception $e ) {
-            $eta_str = '';
+        if ( $remaining > 0 ) {
+            $eta = clone $dt_last;
+            $eta->modify( '+' . intval( $remaining ) . ' seconds' );
+            $eta->setTimezone( new DateTimeZone('Europe/Oslo') );
+            $eta_str = $eta->format('H:i');
         }
 
-        // Convert timestamp to Europe/Oslo for display
-        try {
-            $dt_utc->setTimezone( new DateTimeZone('Europe/Oslo') );
-            $last = $dt_utc->format( $date_fmt . ' ' . $time_fmt );
-        } catch ( Exception $e ) {
-            $last = esc_html( $r['last_updatedUTC'] );
-        }
+        // Format last updated for display
+        $dt_last->setTimezone( new DateTimeZone('Europe/Oslo') );
+        $last_display = $dt_last->format( $date_fmt . ' ' . $time_fmt );
     ?>
       <div class="printer-card"<?php echo $opacity_attr; ?>>
         <h3><?php echo esc_html( $r['printer_name'] ); ?></h3>
@@ -152,7 +145,7 @@ function render_printer_cards() {
         <div class="stat">Printing: <?php echo esc_html( format_hms( $printed ) ); ?></div>
         <div class="stat">
           Remaining: <?php echo esc_html( format_hms( $remaining ) ); ?>
-          <?php if ( $eta_str && $remaining != 0 ) : ?> / ETA: <?php echo esc_html( $eta_str ); ?><?php endif; ?>
+          <?php if ( $eta_str ) : ?> / ETA: <?php echo esc_html( $eta_str ); ?><?php endif; ?>
         </div>
         <div class="stat">Bed:
           <?php echo esc_html( number_format_i18n( floatval($r['temp_bed']), 1 ) ); ?> /
@@ -163,7 +156,7 @@ function render_printer_cards() {
           <?php echo esc_html( number_format_i18n( floatval($r['target_nozzle']), 1 ) ); ?>°C
         </div>
         <div class="stat">Z: <?php echo esc_html( number_format_i18n( floatval($r['axis_z']), 2 ) ); ?> mm</div>
-        <div class="stat">Last updated: <?php echo esc_html( $last ); ?></div>
+        <div class="stat">Last updated: <?php echo esc_html( $last_display ); ?></div>
       </div>
     <?php endforeach; ?>
     </div>
@@ -174,19 +167,18 @@ function render_printer_cards() {
       var containerID = 'printer-cards-container';
       var ajaxURL     = '<?php echo esc_js( admin_url('admin-ajax.php') . '?action=get_printer_cards' ); ?>';
       function refresh() {
-        fetch(ajaxURL)
-          .then(function(res){ return res.text(); })
-          .then(function(html){
+        fetch( ajaxURL )
+          .then( res => res.text() )
+          .then( html => {
             var old = document.getElementById(containerID);
-            if (old && html) {
+            if ( old && html ) {
               var temp = document.createElement('div');
               temp.innerHTML = html;
-              var replacement = temp.firstElementChild;
-              old.parentNode.replaceChild(replacement, old);
+              old.parentNode.replaceChild(temp.firstElementChild, old);
             }
           });
       }
-      setInterval(refresh, 60000);
+      setInterval( refresh, 60000 );
     })();
     </script>
     <?php endif;
@@ -194,5 +186,3 @@ function render_printer_cards() {
     return ob_get_clean();
 }
 add_shortcode( 'printer_cards', 'render_printer_cards' );
-
-?>
